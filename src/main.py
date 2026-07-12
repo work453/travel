@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 
 from .alert_engine import find_all_deals, format_alert_email
-from .amadeus_client import build_client
 from .config import load_config
+from .flight_sources import AmadeusSource, FlightSource, GoogleFlightsSource
 from .notifiers import EmailNotifier, Notifier, TelegramNotifier
 from .price_store import DEFAULT_DB_PATH
 
@@ -26,15 +26,26 @@ def build_notifiers(config) -> list[Notifier]:
     return notifiers
 
 
+def build_sources(config) -> list[FlightSource]:
+    sources: list[FlightSource] = []
+    if config.amadeus_enabled:
+        sources.append(
+            AmadeusSource(config.secrets.amadeus_api_key, config.secrets.amadeus_api_secret)
+        )
+    if config.google_flights_enabled:
+        sources.append(GoogleFlightsSource(config.secrets.serpapi_api_key))
+    return sources
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     config = load_config()
 
-    client = build_client(config.secrets.amadeus_api_key, config.secrets.amadeus_api_secret)
+    sources = build_sources(config)
     notifiers = build_notifiers(config)
 
     deals = find_all_deals(
-        client,
+        sources,
         DEFAULT_DB_PATH,
         config.origins,
         config.destinations,

@@ -7,10 +7,8 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 
-from amadeus import Client
-
-from .amadeus_client import PriceQuote, get_cheapest_price
 from .config import AlertConfig, Place, SearchConfig
+from .flight_sources import FlightSource, PriceQuote
 from .price_store import record_price, get_route_stats
 
 logger = logging.getLogger(__name__)
@@ -40,7 +38,7 @@ def sample_departure_dates(search: SearchConfig, today: date | None = None) -> l
 
 
 def find_cheapest_for_route(
-    client: Client,
+    sources: list[FlightSource],
     origin: Place,
     destination: Place,
     search: SearchConfig,
@@ -48,16 +46,16 @@ def find_cheapest_for_route(
     quotes: list[PriceQuote] = []
     for departure in sample_departure_dates(search):
         return_date = departure + timedelta(days=search.trip_length_days)
-        quote = get_cheapest_price(
-            client,
-            origin.code,
-            destination.code,
-            departure.isoformat(),
-            return_date.isoformat(),
-            search.currency,
-        )
-        if quote:
-            quotes.append(quote)
+        for source in sources:
+            quote = source.get_cheapest_price(
+                origin.code,
+                destination.code,
+                departure.isoformat(),
+                return_date.isoformat(),
+                search.currency,
+            )
+            if quote:
+                quotes.append(quote)
 
     if not quotes:
         logger.info("No offers found for %s->%s", origin.code, destination.code)
@@ -67,14 +65,14 @@ def find_cheapest_for_route(
 
 
 def check_route(
-    client: Client,
+    sources: list[FlightSource],
     db_path: Path,
     origin: Place,
     destination: Place,
     search: SearchConfig,
     alert: AlertConfig,
 ) -> Deal | None:
-    best = find_cheapest_for_route(client, origin, destination, search)
+    best = find_cheapest_for_route(sources, origin, destination, search)
     if best is None:
         return None
 
@@ -116,7 +114,7 @@ def check_route(
 
 
 def find_all_deals(
-    client: Client,
+    sources: list[FlightSource],
     db_path: Path,
     origins: list[Place],
     destinations: list[Place],
@@ -126,7 +124,7 @@ def find_all_deals(
     deals: list[Deal] = []
     for origin in origins:
         for destination in destinations:
-            deal = check_route(client, db_path, origin, destination, search, alert)
+            deal = check_route(sources, db_path, origin, destination, search, alert)
             if deal:
                 deals.append(deal)
     return deals
@@ -140,6 +138,6 @@ def format_alert_email(deals: list[Deal]) -> tuple[str, str]:
             f"- {deal.origin.name} ({deal.origin.code}) -> {deal.destination.name} ({deal.destination.code}): "
             f"{deal.quote.price:.0f} {deal.quote.currency} on {deal.quote.departure_date} "
             f"(return {deal.quote.return_date}), {deal.discount_pct:.0f}% below the "
-            f"{deal.rolling_average:.0f} {deal.quote.currency} average"
+            f"{deal.rolling_average:.0f} {deal.quote.currency} average [via {deal.quote.source}]"
         )
     return subject, "\n".join(lines)

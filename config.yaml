@@ -45,6 +45,13 @@ alert:
   # price points for a route (avoids false positives on day one).
   min_history_points: 5
 
+sources:
+  amadeus:
+    enabled: true
+  google_flights:
+    # Uses SerpApi's Google Flights engine (serpapi.com) — needs SERPAPI_API_KEY.
+    enabled: true
+
 notifications:
   email:
     enabled: true
