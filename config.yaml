@@ -1,0 +1,52 @@
+# Flight deal alert configuration.
+# Edit destinations, thresholds, and dates here — no code changes needed.
+
+origins:
+  - code: BOM
+    name: Mumbai
+  - code: DEL
+    name: Delhi
+
+destinations:
+  - code: DXB
+    name: Dubai
+  - code: SIN
+    name: Singapore
+  - code: BKK
+    name: Bangkok
+  - code: LHR
+    name: London
+  - code: JFK
+    name: New York
+  - code: CDG
+    name: Paris
+  - code: DPS
+    name: Bali (Denpasar)
+  - code: KUL
+    name: Kuala Lumpur
+  - code: SYD
+    name: Sydney
+
+search:
+  # Departure dates searched are sampled evenly across this window, each
+  # as a round trip of trip_length_days.
+  window_start_days: 30
+  window_end_days: 90
+  sample_dates: 3
+  trip_length_days: 7
+  currency: INR
+
+alert:
+  # Alert when today's best price is at least this % cheaper than the
+  # rolling average price seen for that route over rolling_window_days.
+  discount_threshold_pct: 50
+  rolling_window_days: 30
+  # Don't alert until we've collected at least this many historical
+  # price points for a route (avoids false positives on day one).
+  min_history_points: 5
+
+notifications:
+  email:
+    enabled: true
+  telegram:
+    enabled: false

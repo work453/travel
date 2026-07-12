@@ -1,0 +1,48 @@
+name: Flight Price Alerts
+
+on:
+  schedule:
+    # 03:00 UTC ~ 08:30 IST, daily.
+    - cron: "0 3 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  check-prices:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Price history is a small sqlite file that needs to survive between
+      # runs (it's how we compute the 30-day rolling average). Runners are
+      # ephemeral, so we round-trip it through actions/cache instead of
+      # committing it to the repo.
+      - name: Restore price history
+        uses: actions/cache/restore@v4
+        with:
+          path: data/price_history.sqlite3
+          key: price-history-${{ github.run_id }}
+          restore-keys: |
+            price-history-
+
+      - name: Run flight price check
+        env:
+          AMADEUS_API_KEY: ${{ secrets.AMADEUS_API_KEY }}
+          AMADEUS_API_SECRET: ${{ secrets.AMADEUS_API_SECRET }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+        run: python -m src.main
+
+      - name: Save price history
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data/price_history.sqlite3
+          key: price-history-${{ github.run_id }}
