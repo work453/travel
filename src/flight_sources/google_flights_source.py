@@ -1,33 +1,28 @@
-"""Google Flights source — scrapes Google Flights directly via the
-`fast-flights` library, no API key required.
-
-Google has no official public Flights API, so this parses the same data
-Google Flights' web UI loads. That makes it free but unofficial: it can
-break if Google changes their page internals, and cloud/datacenter IPs
-(including GitHub Actions runners) are more likely than residential IPs
-to get rate-limited or served a CAPTCHA. Every call is wrapped so a
-failure here just means this source contributes no quote for that
-route/date — Amadeus (or a future source) can still cover it.
+"""Google Flights source, via SerpApi's google_flights search engine
+(https://serpapi.com/google-flights-api). SerpApi does the scraping; we
+just call their JSON API with an API key, which keeps this ToS-safe and
+reasonably stable compared to scraping Google directly.
 """
 
 from __future__ import annotations
 
 import logging
-import time
 
-from fast_flights import FlightQuery, Passengers, create_filter, get_flights
+import requests
 
 from .base import FlightSource, PriceQuote
 
 logger = logging.getLogger(__name__)
 
-# Small pause before each request so a run's ~50 lookups don't hammer
-# Google in a tight loop, which is the fastest way to get rate-limited.
-REQUEST_DELAY_SECONDS = 1.0
+SERPAPI_URL = "https://serpapi.com/search.json"
+REQUEST_TIMEOUT_SECONDS = 20
 
 
 class GoogleFlightsSource(FlightSource):
     name = "Google Flights"
+
+    def __init__(self, api_key: str) -> None:
+        self._api_key = api_key
 
     def get_cheapest_price(
         self,
@@ -37,23 +32,25 @@ class GoogleFlightsSource(FlightSource):
         return_date: str,
         currency: str,
     ) -> PriceQuote | None:
-        time.sleep(REQUEST_DELAY_SECONDS)
+        params = {
+            "engine": "google_flights",
+            "type": "1",  # round trip
+            "departure_id": origin,
+            "arrival_id": destination,
+            "outbound_date": departure_date,
+            "return_date": return_date,
+            "currency": currency,
+            "hl": "en",
+            "api_key": self._api_key,
+        }
 
         try:
-            query = create_filter(
-                flights=[
-                    FlightQuery(date=departure_date, from_airport=origin, to_airport=destination),
-                    FlightQuery(date=return_date, from_airport=destination, to_airport=origin),
-                ],
-                trip="round-trip",
-                seat="economy",
-                passengers=Passengers(adults=1),
-                currency=currency,
-            )
-            results = get_flights(query)
-        except Exception:
+            response = requests.get(SERPAPI_URL, params=params, timeout=REQUEST_TIMEOUT_SECONDS)
+            response.raise_for_status()
+            data = response.json()
+        except requests.RequestException:
             logger.warning(
-                "Google Flights scrape failed for %s->%s on %s",
+                "SerpApi Google Flights request failed for %s->%s on %s",
                 origin,
                 destination,
                 departure_date,
@@ -61,16 +58,24 @@ class GoogleFlightsSource(FlightSource):
             )
             return None
 
-        if not results:
+        if data.get("error"):
+            logger.warning(
+                "SerpApi Google Flights error for %s->%s: %s", origin, destination, data["error"]
+            )
             return None
 
-        cheapest = min(results, key=lambda flight: flight.price)
+        candidates = (data.get("best_flights") or []) + (data.get("other_flights") or [])
+        priced = [c for c in candidates if isinstance(c.get("price"), (int, float))]
+        if not priced:
+            return None
+
+        cheapest = min(priced, key=lambda c: c["price"])
         return PriceQuote(
             origin=origin,
             destination=destination,
             departure_date=departure_date,
             return_date=return_date,
-            price=float(cheapest.price),
+            price=float(cheapest["price"]),
             currency=currency,
             source=self.name,
         )

@@ -49,8 +49,7 @@ sources:
   amadeus:
     enabled: true
   google_flights:
-    # Scraped directly from Google Flights (fast-flights library) — no API
-    # key needed, but unofficial: can break or get rate-limited over time.
+    # Uses SerpApi's Google Flights engine (serpapi.com) — needs SERPAPI_API_KEY.
     enabled: true
 
 notifications:

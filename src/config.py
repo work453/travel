@@ -42,6 +42,7 @@ class Secrets:
     gmail_address: str
     gmail_app_password: str
     alert_email_to: str
+    serpapi_api_key: str = ""
 
 
 @dataclass(frozen=True)
@@ -81,6 +82,7 @@ def load_config(path: Path | None = None) -> Config:
         gmail_address=_require_env("GMAIL_ADDRESS"),
         gmail_app_password=_require_env("GMAIL_APP_PASSWORD"),
         alert_email_to=os.environ.get("ALERT_EMAIL_TO") or _require_env("GMAIL_ADDRESS"),
+        serpapi_api_key=_require_env("SERPAPI_API_KEY") if google_flights_enabled else "",
     )
 
     return Config(

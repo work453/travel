@@ -33,7 +33,7 @@ def build_sources(config) -> list[FlightSource]:
             AmadeusSource(config.secrets.amadeus_api_key, config.secrets.amadeus_api_secret)
         )
     if config.google_flights_enabled:
-        sources.append(GoogleFlightsSource())
+        sources.append(GoogleFlightsSource(config.secrets.serpapi_api_key))
     return sources
 
 
